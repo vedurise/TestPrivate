@@ -1,19 +1,78 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+trigger: none
 
-trigger:
-- master
+parameters:
+- name: 'infra_version'
+  displayName: 'CDPX-Infra-AzureAutomation Version'
+  type: string
+  default: "*"
 
-pool:
-  vmImage: 'ubuntu-latest'
+- name: 'scripts_version'
+  displayName: 'Scripts Version'
+  type: string
+  default: "*"
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- name: 'rest_lib_version'
+  displayName: 'VSTS-REST-lib Version'
+  type: string
+  default: "*"
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+variables:
+  - name: CDP_DEFINITION_BUILD_COUNT
+    value: $[counter('', 0)]
+  - name: WindowsContainerImage
+    value: 'cdpxwin1809.azurecr.io/global/vse2019:latest'
+
+resources:
+  repositories: 
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+
+extends:
+  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  parameters:
+    globalSDL:
+      baseline:
+        baselineFile: $(Build.SourcesDirectory)\.gdn\.gdnbaselines
+        baselineSet: default
+
+    stages:
+    - stage: build
+      jobs:
+      - job: cdpx_global
+        pool:
+          type: windows
+        variables:
+          ob_outputDirectory: '$(Build.SourcesDirectory)\output'
+        
+        steps:
+          - task: onebranch.pipeline.version@1
+            inputs:
+              system: 'RevisionCounter'
+              major: '1'
+              minor: '4'
+              tag: pre
+
+          - task: CmdLine@2
+            displayName: 'Restore'
+            inputs:
+              script: '$(Build.SourcesDirectory)\.pipelines\restore.cmd'
+              workingDirectory: '$(Build.SourcesDirectory)'
+          - task: CmdLine@2
+            displayName: 'Build'
+            inputs:
+              script: '$(Build.SourcesDirectory)\.pipelines\build.cmd'
+              workingDirectory: '$(Build.SourcesDirectory)'
+
+          - task: CmdLine@2
+            displayName: 'Test'
+            inputs:
+              script: '$(Build.SourcesDirectory)\.pipelines\test.cmd'
+              workingDirectory: '$(Build.SourcesDirectory)'
+
+          - task: CmdLine@2
+            displayName: 'Package'
+            inputs:
+              script: '$(Build.SourcesDirectory)\.pipelines\package.cmd'
+              workingDirectory: '$(Build.SourcesDirectory)'
